@@ -1,0 +1,297 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Аниме-ТВ">
+<meta name="theme-color" content="#000"><meta name="referrer" content="no-referrer">
+<link rel="apple-touch-icon" href="icon.png"><link rel="manifest" href="manifest.json">
+<title>Пульт Аниме-ТВ</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+ *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+ body{margin:0;background:#0b0b0b;color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:calc(env(safe-area-inset-top) + 6px) 12px 92px;user-select:none;-webkit-user-select:none}
+ .card{background:#161616;border-radius:16px;padding:12px;margin:10px 0}
+ #now{display:flex;gap:12px;align-items:center}
+ #now img{width:64px;height:90px;object-fit:cover;border-radius:8px;background:#222;flex:none}
+ #now .t{font-weight:700;font-size:17px;line-height:1.25}
+ #now .m{font-size:13px;opacity:.75;margin-top:3px}
+ .ch{font:800 30px ui-monospace,Menlo,Consolas,monospace;color:#3f6;min-width:52px;text-align:center}
+ #prog{height:8px;background:#333;border-radius:4px;margin-top:10px}
+ #prog div{height:100%;background:#3f6;border-radius:4px;width:0}
+ .row{display:flex;gap:8px;margin:8px 0} .row>*{flex:1}
+ button{background:#232323;color:#fff;border:0;border-radius:14px;font-size:18px;padding:16px 4px;font-weight:600;touch-action:manipulation}
+ button:active{background:#3f6;color:#000} button.on{background:#1f4d2a;color:#7f9} button.big{font-size:24px;padding:20px 4px}
+ .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px} .pad button{font-size:26px;padding:16px 0}
+ #typed{text-align:center;font:800 34px ui-monospace,Menlo,monospace;color:#3f6;height:40px}
+ .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:#111;border-top:1px solid #222;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+ .tabs button{flex:1;border-radius:0;background:none;font-size:12px;padding:9px 0 11px;color:#aaa} .tabs button.on{color:#3f6;background:none} .tabs b{display:block;font-size:22px}
+ .page{display:none}.page.on{display:block}
+ .item{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #222}
+ .item img{width:40px;height:56px;object-fit:cover;border-radius:6px;background:#222;flex:none}
+ .item .tt{flex:1;font-size:15px} .item small{opacity:.65} .item button{font-size:14px;padding:10px;flex:none}
+ .cur{color:#3f6}
+ input,select{width:100%;background:#1c1c1c;color:#fff;border:1px solid #333;border-radius:12px;padding:12px;font-size:17px}
+ h3{margin:14px 0 6px;font-size:15px;opacity:.7;font-weight:600}
+ .tag{display:inline-block;background:#1d3;color:#000;border-radius:4px;padding:0 5px;font-size:11px;font-weight:700}
+ .tag.plan{background:#fc3}.tag.completed{background:#6af}.tag.on_hold{background:#aaa}.tag.dropped{background:#f66}
+ #conn{font-size:12px;opacity:.8;display:flex;justify-content:space-between;align-items:center;gap:8px}
+ #ad{background:linear-gradient(90deg,#c00,#f70);border-radius:12px;padding:10px;display:none;margin-top:8px}
+ #pairing{display:none;text-align:center;padding:40px 10px;line-height:1.6;font-size:17px}
+ #toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#333;padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
+</style></head><body>
+<div id="pairing"><div style="font-size:60px">📺</div><b>Пульт Аниме-ТВ</b><br><br>
+ Чтобы подключиться, на телевизоре открой меню (долгое нажатие OK) → <b>«📱 Пульт с телефона»</b> и наведи камеру телефона на QR-код.<br><br>
+ <small style="opacity:.6">На компьютере: клавиша R. Каждый экран подключается один раз — дальше пульт его помнит.</small></div>
+<div id="app">
+<div class="card">
+  <div id="conn"><select id="screens" onchange="pick(+this.value)" style="width:auto;flex:1;padding:6px 8px;font-size:14px"></select><span id="cst">…</span></div>
+  <div id="now" style="margin-top:10px"><div class="ch" id="chn">--</div><img id="pst"><div><div class="t" id="ttl">Подключаюсь…</div><div class="m" id="meta"></div></div></div>
+  <div id="prog" onclick="seekTap(event)"><div></div></div>
+  <div id="ad">📢 Реклама: <b id="adt"></b> · <span id="adl"></span>
+    <div class="row" style="margin-bottom:0"><button onclick="c('adwatch')">▶ Смотреть это</button><button onclick="c('adskip')">⏭ Пропустить</button></div></div>
+</div>
+<div class="page on" id="p-main">
+  <div class="row"><button class="big" onclick="c('step',1)">CH ▲</button><button class="big" onclick="c('surf')">🎲</button><button class="big" onclick="c('step',-1)">CH ▼</button></div>
+  <div class="row"><button onclick="c('seek',-10)">⏪ 10</button><button class="big" onclick="c('pause')" id="bpause">⏯</button><button onclick="c('seek',10)">10 ⏩</button></div>
+  <div class="row"><button onclick="c('skip')" id="bskip">⏭ Пропуск</button><button onclick="c('nextep')">Серия ▶</button></div>
+  <div class="row"><button onclick="c('vol',-10)">🔉</button><button onclick="c('mute')" id="bmute">🔇</button><button onclick="c('vol',10)">🔊</button></div>
+  <div id="typed"></div>
+  <div class="pad">
+    <button onclick="dg(1)">1</button><button onclick="dg(2)">2</button><button onclick="dg(3)">3</button>
+    <button onclick="dg(4)">4</button><button onclick="dg(5)">5</button><button onclick="dg(6)">6</button>
+    <button onclick="dg(7)">7</button><button onclick="dg(8)">8</button><button onclick="dg(9)">9</button>
+    <button onclick="c('prev')">↩</button><button onclick="dg(0)">0</button><button onclick="go()">OK</button>
+  </div>
+  <div class="row"><button onclick="c('lock')" id="block">📌</button><button onclick="c('fav')" id="bfav">☆</button><button onclick="c('sleep')" id="bsleep">😴</button><button onclick="c('info')">ⓘ</button><button onclick="c('power')">⏻</button></div>
+  <div class="row"><button onclick="c('skipmode')" id="bskm" style="font-size:14px">Пропуск: …</button><button onclick="c('fs')" style="font-size:14px">⛶ Весь экран</button></div>
+</div>
+<div class="page" id="p-play">
+  <h3>Серия</h3><div id="eps" class="pad" style="grid-template-columns:repeat(5,1fr)"></div>
+  <h3>Озвучка</h3><div id="dubs"></div>
+  <h3>Плеер</h3><div id="players"></div>
+  <h3>Сезоны и части</h3><div id="seasons"></div>
+</div>
+<div class="page" id="p-ch"><h3>Каналы</h3><div id="guide"></div></div>
+<div class="page" id="p-find">
+  <div class="row"><input id="q" placeholder="Название аниме" enterkeyhint="search" onkeydown="if(event.key==='Enter')find()"><button onclick="find()" style="flex:0 0 70px">🔍</button></div>
+  <div id="found"></div>
+</div>
+<div class="page" id="p-list"><div class="row"><select id="lst" onchange="renderList()"></select></div><div id="mylist"></div></div>
+<div class="page" id="p-set">
+  <h3>Экраны, к которым подключён этот телефон</h3><div id="pairs"></div>
+  <p style="opacity:.7;font-size:14px;line-height:1.5">Добавить ещё экран: отсканируй его QR (меню → «📱 Пульт с телефона»).<br>
+  Чужие подключиться не могут: у каждого экрана свой секретный ключ, он есть только в QR-коде и на этом телефоне. Всё, что идёт через интернет, зашифровано.</p>
+</div>
+<div class="tabs">
+  <button class="on" onclick="tab('main',this)"><b>🎮</b>Пульт</button>
+  <button onclick="tab('play',this)"><b>🎙</b>Серия</button>
+  <button onclick="tab('ch',this)"><b>📺</b>Каналы</button>
+  <button onclick="tab('find',this)"><b>🔍</b>Поиск</button>
+  <button onclick="tab('list',this)"><b>📋</b>Списки</button>
+  <button onclick="tab('set',this)"><b>⚙</b>Экраны</button>
+</div>
+</div>
+<div id="toast"></div>
+<script>
+// ===== Связь телефон ⇄ экран через публичные MQTT-брокеры, с шифрованием AES-256-GCM =====
+// Ключ знают только экран и спаренные телефоны (передаётся через QR, в части URL после #, на сервер не уходит).
+// Брокер видит только зашифрованные сообщения. Старые/повторные сообщения отбрасываются.
+const Relay = (() => {
+  const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+  const te = new TextEncoder(), td = new TextDecoder();
+  const b64 = u8 => { let s = ''; for (const c of u8) s += String.fromCharCode(c); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const unb64 = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+  const rand = n => { const a = new Uint8Array(n); crypto.getRandomValues(a); return a; };
+  const hasSubtle = () => !!(window.crypto && crypto.subtle && window.isSecureContext !== false);
+  const keyCache = {};
+  async function key(k) {
+    if (!keyCache[k]) keyCache[k] = await crypto.subtle.importKey('raw', unb64(k), 'AES-GCM', false, ['encrypt', 'decrypt']);
+    return keyCache[k];
+  }
+  async function enc(k, obj) {
+    const plain = JSON.stringify(Object.assign({ t: Date.now(), n: b64(rand(9)) }, obj));
+    if (!hasSubtle() && window.AndroidTV && AndroidTV.aesEnc) return AndroidTV.aesEnc(k, plain);
+    const iv = rand(12);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(k), te.encode(plain)));
+    const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+    return b64(out);
+  }
+  const seen = new Map();
+  async function dec(k, s, maxAge) {
+    let plain;
+    try {
+      if (!hasSubtle() && window.AndroidTV && AndroidTV.aesDec) { plain = AndroidTV.aesDec(k, s); if (!plain) return null; }
+      else {
+        const raw = unb64(s);
+        plain = td.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, await key(k), raw.slice(12)));
+      }
+    } catch (e) { return null; }  // чужой ключ или подделка
+    let o; try { o = JSON.parse(plain); } catch (e) { return null; }
+    if (maxAge && Math.abs(Date.now() - o.t) > maxAge) return null;  // старое — возможный повтор
+    if (seen.has(o.n)) return null;  // уже было (сообщения идут через два брокера)
+    seen.set(o.n, o.t); if (seen.size > 500) seen.delete(seen.keys().next().value);
+    return o;
+  }
+  function newPair(name) { return { room: b64(rand(12)), key: b64(rand(32)), name: name || 'Экран' }; }
+  // role: 'screen' слушает команды (c), шлёт состояние (s) и ответы (r); 'phone' — наоборот
+  function open(p, role, onMsg, onStatus) {
+    const base = 'atv1/' + p.room + '/';
+    const subs = role === 'screen' ? ['c'] : ['s', 'r'];
+    const clients = [];
+    const up = new Set();
+    const status = () => onStatus && onStatus(up.size, BROKERS.length);
+    for (const url of BROKERS) {
+      if (!window.mqtt) break;
+      const cl = mqtt.connect(url, { clientId: 'atv_' + b64(rand(8)), clean: true, reconnectPeriod: 4000, connectTimeout: 10000, keepalive: 30 });
+      cl.on('connect', () => { up.add(url); status(); for (const t of subs) cl.subscribe(base + t, { qos: 0 }); });
+      cl.on('close', () => { up.delete(url); status(); });
+      cl.on('error', () => { });
+      cl.on('message', async (topic, buf) => {
+        const kind = topic.slice(base.length);
+        const o = await dec(p.key, td.decode(buf), kind === 's' ? 0 : 120000);
+        if (o) onMsg(kind, o);
+      });
+      clients.push(cl);
+    }
+    return {
+      async send(kind, obj, retain) {
+        const payload = await enc(p.key, obj);
+        for (const cl of clients) if (cl.connected) cl.publish(base + kind, payload, { qos: 0, retain: !!retain });
+      },
+      connected: () => up.size > 0,
+      close() { for (const cl of clients) try { cl.end(true); } catch (e) { } },
+    };
+  }
+  return { open, newPair, hasSubtle, b64, unb64 };
+})();
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=s=>{s=Math.max(0,Math.floor(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s%60).padStart(2,'0')};
+function toast(t){ const e=$('toast'); e.textContent=t; e.style.opacity=1; clearTimeout(toast.t); toast.t=setTimeout(()=>e.style.opacity=0,2000); }
+
+// ---- спаренные экраны ----
+let pairs=[]; try{ pairs=JSON.parse(localStorage.getItem('atv_pairs')||'[]'); }catch(e){}
+let cur=+(localStorage.getItem('atv_cur')||0);
+(function(){ // пары из адреса: #p=room.key.name~room.key.name (так их запомнит и значок «На экран Домой»)
+  const h=location.hash.startsWith('#p=') ? location.hash.slice(3) : '';
+  let added=null;
+  for(const part of h.split('~')){
+    const m=part.match(/^([\w-]+)\.([\w-]+)\.?(.*)$/); if(!m) continue;
+    const p={room:m[1], key:m[2], name:decodeURIComponent(m[3]||'Экран')};
+    const i=pairs.findIndex(x=>x.room===p.room);
+    if(i<0){ pairs.push(p); added=pairs.length-1; } else { pairs[i]=p; if(added===null) added=i; }
+  }
+  if(added!==null){ cur=added; savePairs(); setTimeout(()=>toast('Подключено: '+pairs[cur].name),300); }
+})();
+function syncHash(){ history.replaceState(null,'',location.pathname+(pairs.length?'#p='+pairs.map(p=>p.room+'.'+p.key+'.'+encodeURIComponent(p.name)).join('~'):'')); }
+function savePairs(){ syncHash(); try{ localStorage.setItem('atv_pairs',JSON.stringify(pairs)); localStorage.setItem('atv_cur',String(cur)); }catch(e){} }
+
+let link=null, S=null, stateAt=0, rpcs={}, rpcId=0, up=0, typed='', typedT, lastEpsKey='';
+function connect(){
+  if(link) link.close(); S=null; stateAt=0; rpcs={};
+  if(!pairs.length){ $('pairing').style.display='block'; $('app').style.display='none'; return; }
+  $('pairing').style.display='none'; $('app').style.display='block';
+  if(cur>=pairs.length) cur=0;
+  if(!Relay.hasSubtle()){ $('ttl').textContent='Браузер без шифрования — открой в Safari/Chrome'; return; }
+  link=Relay.open(pairs[cur],'phone',onMsg,n=>{ up=n; if(n) link.send('c',{type:'hello'}); render(); });
+  renderScreens();
+}
+function onMsg(kind,o){
+  if(o.type==='state'){ S=o.state; stateAt=o.t; render(); }
+  else if(o.type==='res' && rpcs[o.id]){ rpcs[o.id](o.result); delete rpcs[o.id]; }
+}
+function pick(i){ cur=i; savePairs(); connect(); }
+async function c(cmd,arg){
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(!link||!up){ toast('Нет связи'); return; }
+  await link.send('c',{type:'cmd',cmd,arg:arg??null});
+}
+function api(method,...args){
+  return new Promise(res=>{
+    if(!link||!up){ res({error:'нет связи'}); return; }
+    const id=++rpcId; rpcs[id]=res; setTimeout(()=>{ if(rpcs[id]){ delete rpcs[id]; res({error:'экран не ответил'}); } },15000);
+    link.send('c',{type:'rpc',id,method,args});
+  });
+}
+function dg(n){ typed=(typed+n).slice(-3); $('typed').textContent=typed; clearTimeout(typedT); typedT=setTimeout(go,1800); }
+function go(){ clearTimeout(typedT); if(typed){ c('tune',+typed); typed=''; $('typed').textContent=''; } }
+function tab(n,b){ document.querySelectorAll('.page').forEach(p=>p.classList.remove('on')); $('p-'+n).classList.add('on');
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  if(n==='ch') loadGuide(); if(n==='list') loadLists(); if(n==='play'){ renderPlay(true); loadSeasons(); } if(n==='set') renderPairs(); window.scrollTo(0,0); }
+function seekTap(e){ if(!S||!S.dur) return; const r=e.currentTarget.getBoundingClientRect(); c('seekto', Math.floor(S.dur*(e.clientX-r.left)/r.width)); }
+function renderScreens(){ $('screens').innerHTML=pairs.map((p,i)=>'<option value="'+i+'" '+(i===cur?'selected':'')+'>📺 '+esc(p.name)+'</option>').join(''); }
+function renderPairs(){
+  $('pairs').innerHTML=pairs.map((p,i)=>'<div class="item"><div class="tt">'+(i===cur?'● ':'')+esc(p.name)+'</div><button onclick="pick('+i+')">Выбрать</button><button onclick="unpair('+i+')">Удалить</button></div>').join('')||'<small>Нет</small>';
+}
+function unpair(i){ pairs.splice(i,1); if(cur>=pairs.length) cur=0; savePairs(); connect(); renderPairs(); }
+
+function render(){
+  const online = S && Date.now()-stateAt < 12000;
+  $('cst').innerHTML = !up ? '<span style="color:#fc6">● нет интернета</span>' : online ? '<span style="color:#3f6">● на связи</span>' : '<span style="color:#f66">● экран не в сети</span>';
+  if(!S){ $('ttl').textContent = up ? 'Жду экран… Аниме-ТВ на нём запущено?' : 'Подключаюсь…'; $('meta').textContent=''; return; }
+  const h=S.ch;
+  $('chn').textContent = h ? String(h.channel).padStart(2,'0') : (S.powered?'··':'⏻');
+  $('pst').src = h&&h.poster ? h.poster : ''; $('pst').style.visibility = h&&h.poster?'visible':'hidden';
+  $('ttl').textContent = h ? (h.fav?'★ ':'')+(S.locked?'📌 ':'')+h.title : (S.powered?(S.ad?'Реклама':'Переключаю…'):'ТВ выключен — нажми ⏻ или номер');
+  $('meta').innerHTML = h ? 'Серия '+esc(h.episode)+' из '+h.episodes_total+' · '+esc(h.dub)+'<br>'+fmt(S.cur)+(S.dur?' / '+fmt(S.dur):'')
+     +(h.list?' · <span class="tag '+h.list.status+'">'+esc(h.list.status_name)+'</span>'+(h.list.my_score?' моя '+h.list.my_score+'/10':''):'') : '';
+  $('prog').firstElementChild.style.width = S.dur ? Math.min(100,100*S.cur/S.dur)+'%' : '0';
+  $('ad').style.display = S.ad ? 'block':'none'; if(S.ad){ $('adt').textContent=S.ad.title||'…'; $('adl').textContent='осталось '+fmt(S.ad.left); }
+  $('bpause').textContent = S.paused?'▶':'⏸';
+  $('bmute').textContent = S.muted?'🔇 вкл. звук':'🔇 '+S.vol+'%';
+  $('block').classList.toggle('on',!!S.locked); $('bfav').textContent = h&&h.fav?'★':'☆';
+  $('bsleep').textContent = S.sleepLeft?'😴 '+S.sleepLeft+'м':'😴';
+  $('bskip').textContent = S.prompt ? '⏭ Пропустить '+(S.prompt==='opening'?'опенинг':'эндинг') : '⏭ Пропуск'; $('bskip').classList.toggle('on',!!S.prompt);
+  $('bskm').textContent = 'Пропуск: '+({instant:'сразу',delayed:'через 10 сек',button:'кнопка',off:'выкл'}[S.skip_mode]||'');
+  if($('p-play').classList.contains('on')) renderPlay();
+}
+function renderPlay(force){
+  const h=S&&S.ch; if(!h){ $('eps').innerHTML='<small>Ничего не идёт</small>'; return; }
+  const key=h.channel+'|'+h.anime_id+'|'+h.dub+'|'+h.episode+'|'+h.player;
+  if(!force && key===lastEpsKey) return; lastEpsKey=key;
+  $('eps').innerHTML = (h.episodes||[]).map(e=>'<button class="'+(String(e)===String(h.episode)?'on':'')+'" onclick="c(\'ep\',\''+esc(e)+'\')">'+esc(e)+'</button>').join('');
+  const lst=(arr,curv,cmd)=>(arr||[]).map(d=>'<div class="item"><div class="tt '+(d===curv?'cur':'')+'">'+esc(d)+(d===curv?' ●':'')+'</div>'+(d===curv?'':'<button onclick="c(\''+cmd+'\',this.dataset.v)" data-v="'+esc(d)+'">Выбрать</button>')+'</div>').join('');
+  $('dubs').innerHTML=lst(h.dubs,h.dub,'dub'); $('players').innerHTML=lst(h.players,h.player,'player');
+}
+async function loadSeasons(){
+  const h=S&&S.ch; if(!h){ $('seasons').innerHTML=''; return; } $('seasons').innerHTML='<small>Загружаю…</small>';
+  const fr=await api('franchise', h.channel);
+  $('seasons').innerHTML = Array.isArray(fr)&&fr.length ? fr.map(o=>'<div class="item"><div class="tt '+(o.current?'cur':'')+'">'+esc(o.title)+(o.year?' ('+o.year+')':'')+'<br><small>'+esc(o.type)+' · '+esc(o.text)+'</small></div>'
+     +(o.current?'':'<button onclick="c(\'season\','+o.anime_id+')">▶</button>')+'</div>').join('') : '<small>Других частей нет</small>';
+}
+async function loadGuide(){
+  $('guide').innerHTML='<small>Загружаю…</small>';
+  const g=await api('guide'); if(!Array.isArray(g)){ $('guide').textContent=g.error||'Ошибка'; return; }
+  $('guide').innerHTML = g.map(x=>'<div class="item" onclick="c(\'tune\','+x.channel+')"><div class="ch" style="font-size:22px">'+String(x.channel).padStart(2,'0')+'</div>'
+    +(x.poster?'<img src="'+esc(x.poster)+'" loading="lazy">':'<img>')+'<div class="tt">'+(x.fav?'★ ':'')+esc(x.title)+'<br><small>'+(x.episode?'серия '+esc(x.episode)+' · '+esc(x.dub):'ещё не смотрел')+'</small></div></div>').join('') || '<small>Каналов пока нет — набери номер</small>';
+}
+let found=[];
+async function find(){
+  const q=$('q').value.trim(); if(!q) return; $('q').blur(); $('found').innerHTML='<small>Ищу…</small>';
+  const r=await api('search', q); if(!Array.isArray(r)){ $('found').textContent=r.error||'Ошибка'; return; } found=r;
+  $('found').innerHTML = r.map((a,i)=>'<div class="item">'+(a.poster?'<img src="'+esc(a.poster.startsWith('//')?'https:'+a.poster:a.poster)+'">':'<img>')
+    +'<div class="tt">'+esc(a.title)+(a.year?' ('+a.year+')':'')+'<br><small>'+esc(a.type)+' · '+esc(a.status)+(a.rating?' · ★ '+a.rating:'')+'</small></div>'
+    +'<button onclick="c(\'watch\',found['+i+'])">▶</button><button onclick="c(\'assign\',found['+i+'])">📺</button></div>').join('') || '<small>Ничего не нашлось</small>';
+}
+let LD=null;
+async function loadLists(){
+  $('mylist').innerHTML='<small>Загружаю…</small>';
+  LD=await api('my_lists'); if(!LD||!LD.items){ $('mylist').textContent=(LD&&LD.error)||'Ошибка'; return; }
+  const cnt=k=>LD.items.filter(i=>i.status===k).length, curv=$('lst').value||'watching';
+  $('lst').innerHTML = Object.entries(LD.statuses).map(([k,v])=>'<option value="'+k+'" '+(k===curv?'selected':'')+'>'+v+' ('+cnt(k)+')</option>').join('')
+    +'<option value="rated" '+(curv==='rated'?'selected':'')+'>★ Мои оценки</option>';
+  renderList();
+}
+function renderList(){
+  if(!LD) return; const k=$('lst').value;
+  const l = k==='rated' ? LD.items.filter(i=>i.my_score).sort((a,b)=>b.my_score-a.my_score) : LD.items.filter(i=>i.status===k);
+  window._l=l;
+  $('mylist').innerHTML = l.map((it,i)=>'<div class="item">'+(it.poster?'<img src="'+esc(it.poster)+'" loading="lazy">':'<img>')
+    +'<div class="tt">'+esc(it.title)+'<br><small>'+(it.my_score?'моя '+it.my_score+'/10 · ':'')+Object.entries(it.others||{}).slice(0,3).map(([a,b])=>a+' '+b).join(' · ')+'</small></div>'
+    +(it.yummy_id?'<button onclick="c(\'watch\',_l['+i+'].yummy)">▶</button><button onclick="c(\'assign\',_l['+i+'].yummy)">📺</button>':'')+'</div>').join('')
+    || '<small>Пусто. Загрузить свой профиль: на экране меню → «Мои списки».</small>';
+}
+setInterval(render, 2000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && link && up) link.send('c',{type:'hello'}); });
+connect();
+</script></body></html>
