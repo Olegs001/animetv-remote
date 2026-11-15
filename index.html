@@ -73,7 +73,8 @@
 <div class="page" id="p-ch"><h3>Каналы</h3><div id="guide"></div></div>
 <div class="page" id="p-find">
   <div class="row"><input id="q" placeholder="Название аниме" enterkeyhint="search" onkeydown="if(event.key==='Enter')find()"><button onclick="find()" style="flex:0 0 70px">🔍</button></div>
-  <div id="found"></div>
+  <div class="row"><button style="font-size:14px" onclick="cat({sort:'top'})">🏆 Лучшие</button><button style="font-size:14px" onclick="cat({from_year:new Date().getFullYear()})">🆕 Новинки</button><button style="font-size:14px" onclick="cat({status:'ongoing'})">📡 Онгоинги</button><button style="font-size:14px" onclick="cat({sort:'random'})">🎲</button></div>
+  <div id="found"></div><div id="more"></div>
 </div>
 <div class="page" id="p-list"><div class="row"><select id="lst" onchange="renderList()"></select></div><div id="mylist"></div></div>
 <div class="page" id="p-set">
@@ -85,7 +86,7 @@
   <button class="on" onclick="tab('main',this)"><b>🎮</b>Пульт</button>
   <button onclick="tab('play',this)"><b>🎙</b>Серия</button>
   <button onclick="tab('ch',this)"><b>📺</b>Каналы</button>
-  <button onclick="tab('find',this)"><b>🔍</b>Поиск</button>
+  <button onclick="tab('find',this)"><b>📚</b>Каталог</button>
   <button onclick="tab('list',this)"><b>📋</b>Списки</button>
   <button onclick="tab('set',this)"><b>⚙</b>Экраны</button>
 </div>
@@ -265,10 +266,19 @@ async function loadGuide(){
   $('guide').innerHTML = g.map(x=>'<div class="item" onclick="c(\'tune\','+x.channel+')"><div class="ch" style="font-size:22px">'+String(x.channel).padStart(2,'0')+'</div>'
     +(x.poster?'<img src="'+esc(x.poster)+'" loading="lazy">':'<img>')+'<div class="tt">'+(x.fav?'★ ':'')+esc(x.title)+'<br><small>'+(x.episode?'серия '+esc(x.episode)+' · '+esc(x.dub):'ещё не смотрел')+'</small></div></div>').join('') || '<small>Каналов пока нет — набери номер</small>';
 }
-let found=[];
+let found=[], catQ=null;
+async function cat(o, more){
+  if(!more){ catQ=Object.assign({offset:0},o); found=[]; $('found').innerHTML='<small>Загружаю…</small>'; } else catQ.offset+=24;
+  $('more').innerHTML='';
+  const r=await api('catalog', catQ); if(!Array.isArray(r)){ $('found').textContent=r.error||'Ошибка'; return; }
+  found=found.concat(r.filter(a=>!a.announce)); showFound();
+  if(r.length>=24) $('more').innerHTML='<button style="width:100%;margin-top:8px" onclick="cat(null,true)">⬇ Ещё</button>';
+}
 async function find(){
-  const q=$('q').value.trim(); if(!q) return; $('q').blur(); $('found').innerHTML='<small>Ищу…</small>';
-  const r=await api('search', q); if(!Array.isArray(r)){ $('found').textContent=r.error||'Ошибка'; return; } found=r;
+  const q=$('q').value.trim(); if(!q) return; $('q').blur(); $('found').innerHTML='<small>Ищу…</small>'; $('more').innerHTML='';
+  const r=await api('search', q); if(!Array.isArray(r)){ $('found').textContent=r.error||'Ошибка'; return; } found=r; showFound();
+}
+function showFound(){ const r=found;
   $('found').innerHTML = r.map((a,i)=>'<div class="item">'+(a.poster?'<img src="'+esc(a.poster.startsWith('//')?'https:'+a.poster:a.poster)+'">':'<img>')
     +'<div class="tt">'+esc(a.title)+(a.year?' ('+a.year+')':'')+'<br><small>'+esc(a.type)+' · '+esc(a.status)+(a.rating?' · ★ '+a.rating:'')+'</small></div>'
     +'<button onclick="c(\'watch\',found['+i+'])">▶</button><button onclick="c(\'assign\',found['+i+'])">📺</button></div>').join('') || '<small>Ничего не нашлось</small>';
