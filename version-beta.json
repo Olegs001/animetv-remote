@@ -1,11 +1,11 @@
 {
- "apk": "3.11",
+ "apk": "3.12",
  "url": "https://olegs001.github.io/animetv-remote/AnimeTV.apk",
- "pc": "3.6.0",
- "pc_url": "https://olegs001.github.io/animetv-remote/versions/AnimeTV_pc-3.6.0.zip",
- "pc_sha256": "b5e96ee630977785966ab266d9932f25fe385202eff15e439c329ea5812bd7c8",
- "pc_notes": "Защита: бета-канал, автооткат ПК, кнопка «Вернуть прошлую версию», ежедневные копии данных, аварийные выключатели",
- "apk_sha256": "52da98e0db54cd2256f9684fd91a25d407a941ebc472c59bdfd6929dac864304",
- "apk_notes": "Защита: бета-канал, автооткат ПК, кнопка «Вернуть прошлую версию», ежедневные копии данных, аварийные выключатели",
- "apk_url": "https://olegs001.github.io/animetv-remote/versions/AnimeTV-3.11.apk"
+ "pc": "3.6.1",
+ "pc_url": "https://olegs001.github.io/animetv-remote/versions/AnimeTV_pc-3.6.1.zip",
+ "pc_sha256": "5e37b84639bbbdff28776cb37f9c3e5b7d9d07a1bb3ddec6d405eaac352638c9",
+ "pc_notes": "Каналы без «застрявших» плееров (Zedfilm), автозапуск и автозакрытие ошибок чужих плееров + всё из 3.6.0",
+ "apk_sha256": "f2a76f9287f4290702fefd8a3169fb9d213f6e4ac76df491c461bcaf92792e4c",
+ "apk_notes": "Каналы без «застрявших» плееров (Zedfilm), автозапуск и автозакрытие ошибок чужих плееров + всё из 3.6.0",
+ "apk_url": "https://olegs001.github.io/animetv-remote/versions/AnimeTV-3.12.apk"
 }
