@@ -36,6 +36,7 @@
  #conn{font-size:12px;opacity:.8;display:flex;justify-content:space-between;align-items:center;gap:8px}
  #ad{background:linear-gradient(90deg,#c00,#f70);border-radius:12px;padding:10px;display:none;margin-top:8px}
  #pairing{display:none;text-align:center;padding:40px 10px;line-height:1.6;font-size:17px}
+ #auth{display:none;background:#3a2a00;border:1px solid #fc6;border-radius:12px;padding:10px;margin-top:8px;font-size:15px;line-height:1.4}
  #toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:#333;padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
 </style></head><body>
 <div id="pairing"><div style="font-size:60px">📺</div><b>Пульт Аниме-ТВ</b><br><br>
@@ -46,6 +47,7 @@
   <div id="conn"><select id="screens" onchange="pick(+this.value)" style="width:auto;flex:1;padding:6px 8px;font-size:14px"></select><span id="cst">…</span></div>
   <div id="now" style="margin-top:10px"><div class="ch" id="chn">--</div><img id="pst"><div><div class="t" id="ttl">Подключаюсь…</div><div class="m" id="meta"></div></div></div>
   <div id="prog" onclick="seekTap(event)"><div></div></div>
+  <div id="auth"></div>
   <div id="ad">📢 Реклама: <b id="adt"></b> · <span id="adl"></span>
     <div class="row" style="margin-bottom:0"><button onclick="c('adwatch')">▶ Смотреть это</button><button onclick="c('adskip')">⏭ Пропустить</button></div></div>
 </div>
@@ -68,9 +70,10 @@
   <h3>Серия</h3><div id="eps" class="pad" style="grid-template-columns:repeat(5,1fr)"></div>
   <h3>Озвучка</h3><div id="dubs"></div>
   <h3>Плеер</h3><div id="players"></div>
+  <h3>Скорость</h3><div class="row" id="speeds"></div>
   <h3>Сезоны и части</h3><div id="seasons"></div>
 </div>
-<div class="page" id="p-ch"><h3>Каналы</h3><div id="guide"></div></div>
+<div class="page" id="p-ch"><h3>▶ Продолжить просмотр</h3><div id="cont"></div><h3>Каналы</h3><div id="guide"></div></div>
 <div class="page" id="p-find">
   <div class="row"><input id="q" placeholder="Название аниме" enterkeyhint="search" onkeydown="if(event.key==='Enter')find()"><button onclick="find()" style="flex:0 0 70px">🔍</button></div>
   <div class="row"><button style="font-size:14px" onclick="cat({sort:'top'})">🏆 Лучшие</button><button style="font-size:14px" onclick="cat({from_year:new Date().getFullYear()})">🆕 Новинки</button><button style="font-size:14px" onclick="cat({status:'ongoing'})">📡 Онгоинги</button><button style="font-size:14px" onclick="cat({sort:'random'})">🎲</button></div>
@@ -78,9 +81,10 @@
 </div>
 <div class="page" id="p-list"><div class="row"><select id="lst" onchange="renderList()"></select></div><div id="mylist"></div></div>
 <div class="page" id="p-set">
+  <h3>Имя этого телефона (его видно на экране)</h3><div class="row"><input id="pname" onchange="setName(this.value)"></div>
   <h3>Экраны, к которым подключён этот телефон</h3><div id="pairs"></div>
   <p style="opacity:.7;font-size:14px;line-height:1.5">Добавить ещё экран: отсканируй его QR (меню → «📱 Пульт с телефона»).<br>
-  Чужие подключиться не могут: у каждого экрана свой секретный ключ, он есть только в QR-коде и на этом телефоне. Всё, что идёт через интернет, зашифровано.</p>
+  Чужие подключиться не могут: у каждого экрана свой секретный ключ, он есть только в QR-коде и на этом телефоне. Всё, что идёт через интернет, зашифровано, а каждый новый телефон нужно один раз подтвердить на самом экране.</p>
 </div>
 <div class="tabs">
   <button class="on" onclick="tab('main',this)"><b>🎮</b>Пульт</button>
@@ -133,10 +137,12 @@ const Relay = (() => {
     return o;
   }
   function newPair(name) { return { room: b64(rand(12)), key: b64(rand(32)), name: name || 'Экран' }; }
-  // role: 'screen' слушает команды (c), шлёт состояние (s) и ответы (r); 'phone' — наоборот
+  // role: 'screen' слушает команды (c), шлёт состояние (s) и ответы (r); 'phone' — наоборот;
+  // 'party' — совместный просмотр (p); 'sync' — синхронизация устройств (y/<устройство>, хранится на сервере)
+  const ROLE_SUBS = { screen: ['c'], phone: ['s', 'r'], party: ['p'], sync: ['y/+'] };
   function open(p, role, onMsg, onStatus) {
     const base = 'atv1/' + p.room + '/';
-    const subs = role === 'screen' ? ['c'] : ['s', 'r'];
+    const subs = ROLE_SUBS[role] || role;
     const clients = [];
     const up = new Set();
     const status = () => onStatus && onStatus(up.size, BROKERS.length);
@@ -148,7 +154,7 @@ const Relay = (() => {
       cl.on('error', () => { });
       cl.on('message', async (topic, buf) => {
         const kind = topic.slice(base.length);
-        const o = await dec(p.key, td.decode(buf), kind === 's' ? 0 : 120000);
+        const o = await dec(p.key, td.decode(buf), (kind === 's' || kind.startsWith('y/')) ? 0 : 120000);
         if (o) onMsg(kind, o);
       });
       clients.push(cl);
@@ -162,7 +168,60 @@ const Relay = (() => {
       close() { for (const cl of clients) try { cl.end(true); } catch (e) { } },
     };
   }
-  return { open, newPair, hasSubtle, b64, unb64 };
+  // ---- подпись телефона (ECDSA P-256): экран принимает команды только от подтверждённых телефонов ----
+  const ECDSA = { name: 'ECDSA', namedCurve: 'P-256' }, SIGN = { name: 'ECDSA', hash: 'SHA-256' };
+  async function pidOf(pubB64) { return b64(new Uint8Array(await crypto.subtle.digest('SHA-256', unb64(pubB64))).slice(0, 12)); }
+  async function verify(pubB64, data, sigB64) {
+    try {
+      if (!hasSubtle()) return !!(window.AndroidTV && AndroidTV.ecVerify && AndroidTV.ecVerify(pubB64, data, sigB64));
+      const k = await crypto.subtle.importKey('spki', unb64(pubB64), ECDSA, false, ['verify']);
+      return await crypto.subtle.verify(SIGN, k, unb64(sigB64), te.encode(data));
+    } catch (e) { return false; }
+  }
+  let ident = null;  // ключ этого телефона (хранится только на нём)
+  async function identity() {
+    if (ident) return ident;
+    let st = null; try { st = JSON.parse(localStorage.atv_ident || 'null'); } catch (e) { }
+    let priv, pub;
+    if (st && st.priv && st.pub) {
+      priv = await crypto.subtle.importKey('pkcs8', unb64(st.priv), ECDSA, false, ['sign']); pub = st.pub;
+    } else {
+      const kp = await crypto.subtle.generateKey(ECDSA, true, ['sign', 'verify']);
+      pub = b64(new Uint8Array(await crypto.subtle.exportKey('spki', kp.publicKey)));
+      const pk = b64(new Uint8Array(await crypto.subtle.exportKey('pkcs8', kp.privateKey)));
+      localStorage.atv_ident = JSON.stringify({ priv: pk, pub });
+      priv = kp.privateKey;
+    }
+    ident = { pub, pid: await pidOf(pub), priv };
+    return ident;
+  }
+  async function signed(obj) {  // {type:'signed', pid, s, sig}; внутри s — команда и время
+    const me = await identity();
+    const s = JSON.stringify(Object.assign({ t: Date.now(), r: b64(rand(6)) }, obj));
+    const sig = b64(new Uint8Array(await crypto.subtle.sign(SIGN, me.priv, te.encode(s))));
+    return { type: 'signed', pid: me.pid, s, sig };
+  }
+  // ---- код из 10 символов (совместный просмотр, синхронизация) → комната и ключ ----
+  const ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  function newCode() { const r = rand(10); let c = ''; for (let i = 0; i < 10; i++) c += ABC[r[i] % 32]; return c.slice(0, 5) + '-' + c.slice(5); }
+  function normCode(c) { c = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return c.length === 10 && [...c].every(x => ABC.includes(x)) ? c.slice(0, 5) + '-' + c.slice(5) : null; }
+  async function fromCode(code, salt) {
+    const base = await crypto.subtle.importKey('raw', te.encode(code.replace('-', '')), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: te.encode('animetv-' + salt + '-v1'), iterations: 150000, hash: 'SHA-256' }, base, 352));
+    return { room: b64(bits.slice(0, 12)), key: b64(bits.slice(12, 44)) };
+  }
+  // ---- сжатие больших сообщений (синхронизация) ----
+  async function gz(str) {
+    if (!window.CompressionStream) return null;
+    const cs = new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'));
+    return b64(new Uint8Array(await new Response(cs).arrayBuffer()));
+  }
+  async function gunz(s) {
+    const ds = new Blob([unb64(s)]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(ds).text();
+  }
+  return { open, newPair, hasSubtle, b64, unb64, verify, pidOf, identity, signed, newCode, normCode, fromCode, gz, gunz };
 })();
 
 const $=id=>document.getElementById(id);
@@ -194,10 +253,26 @@ function connect(){
   $('pairing').style.display='none'; $('app').style.display='block';
   if(cur>=pairs.length) cur=0;
   if(!Relay.hasSubtle()){ $('ttl').textContent='Браузер без шифрования — открой в Safari/Chrome'; return; }
-  link=Relay.open(pairs[cur],'phone',onMsg,n=>{ up=n; if(n) link.send('c',{type:'hello'}); render(); });
+  link=Relay.open(pairs[cur],'phone',onMsg,n=>{ up=n; if(n) hello(); render(); });
   renderScreens();
 }
-function onMsg(kind,o){
+// ---- этот телефон: свой ключ подписи; экран пускает только подтверждённые телефоны ----
+function phoneName(){ return localStorage.getItem('atv_name') || (/iPhone/.test(navigator.userAgent)?'iPhone':/iPad/.test(navigator.userAgent)?'iPad':/Android/.test(navigator.userAgent)?'Android':'Телефон'); }
+function setName(v){ localStorage.setItem('atv_name', String(v||'').trim().slice(0,30)); hello(); }
+let auth='', lastHello=0;
+async function hello(){
+  if(!link||!up||Date.now()-lastHello<3000) return; lastHello=Date.now();
+  try{ const me=await Relay.identity(), m=await Relay.signed({hello:1});
+    link.send('c',{type:'hello', pid:me.pid, pub:me.pub, name:phoneName(), s:m.s, sig:m.sig}); }catch(e){ toast('Ошибка ключа: '+e); }
+}
+function renderAuth(){
+  const t={pending:'📱 Подтверди этот телефон на экране: появилось окно «Новый телефон» — нажми «Разрешить» (OK на пульте или Y на клавиатуре).',
+    denied:'⛔ Экран не разрешил этот телефон. Если это ошибка — отсканируй QR заново и нажми «Разрешить».'}[auth];
+  $('auth').style.display=t?'block':'none'; if(t) $('auth').textContent=t;
+}
+async function onMsg(kind,o){
+  if(o.type==='auth'){ const me=await Relay.identity(); if(o.pid && o.pid!==me.pid) return;
+    if(o.status==='unknown'){ auth='pending'; hello(); } else if(o.status!=='update') auth=o.status; renderAuth(); return; }
   if(o.type==='state'){ S=o.state; stateAt=o.t; render(); }
   else if(o.type==='res' && rpcs[o.id]){ rpcs[o.id](o.result); delete rpcs[o.id]; }
 }
@@ -205,20 +280,21 @@ function pick(i){ cur=i; savePairs(); connect(); }
 async function c(cmd,arg){
   if(navigator.vibrate) navigator.vibrate(15);
   if(!link||!up){ toast('Нет связи'); return; }
-  await link.send('c',{type:'cmd',cmd,arg:arg??null});
+  if(auth==='pending'||auth==='denied'){ renderAuth(); toast('Сначала подтверди телефон на экране'); hello(); return; }
+  await link.send('c', await Relay.signed({type:'cmd',cmd,arg:arg??null}));
 }
 function api(method,...args){
   return new Promise(res=>{
     if(!link||!up){ res({error:'нет связи'}); return; }
     const id=++rpcId; rpcs[id]=res; setTimeout(()=>{ if(rpcs[id]){ delete rpcs[id]; res({error:'экран не ответил'}); } },15000);
-    link.send('c',{type:'rpc',id,method,args});
+    Relay.signed({type:'rpc',id,method,args}).then(m=>link.send('c',m));
   });
 }
 function dg(n){ typed=(typed+n).slice(-3); $('typed').textContent=typed; clearTimeout(typedT); typedT=setTimeout(go,1800); }
 function go(){ clearTimeout(typedT); if(typed){ c('tune',+typed); typed=''; $('typed').textContent=''; } }
 function tab(n,b){ document.querySelectorAll('.page').forEach(p=>p.classList.remove('on')); $('p-'+n).classList.add('on');
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
-  if(n==='ch') loadGuide(); if(n==='list') loadLists(); if(n==='play'){ renderPlay(true); loadSeasons(); } if(n==='set') renderPairs(); window.scrollTo(0,0); }
+  if(n==='ch'){ loadCont(); loadGuide(); } if(n==='set') $('pname').value=phoneName(); if(n==='list') loadLists(); if(n==='play'){ renderPlay(true); loadSeasons(); } if(n==='set') renderPairs(); window.scrollTo(0,0); }
 function seekTap(e){ if(!S||!S.dur) return; const r=e.currentTarget.getBoundingClientRect(); c('seekto', Math.floor(S.dur*(e.clientX-r.left)/r.width)); }
 function renderScreens(){ $('screens').innerHTML=pairs.map((p,i)=>'<option value="'+i+'" '+(i===cur?'selected':'')+'>📺 '+esc(p.name)+'</option>').join(''); }
 function renderPairs(){
@@ -252,6 +328,7 @@ function renderPlay(force){
   if(!force && key===lastEpsKey) return; lastEpsKey=key;
   $('eps').innerHTML = (h.episodes||[]).map(e=>'<button class="'+(String(e)===String(h.episode)?'on':'')+'" onclick="c(\'ep\',\''+esc(e)+'\')">'+esc(e)+'</button>').join('');
   const lst=(arr,curv,cmd)=>(arr||[]).map(d=>'<div class="item"><div class="tt '+(d===curv?'cur':'')+'">'+esc(d)+(d===curv?' ●':'')+'</div>'+(d===curv?'':'<button onclick="c(\''+cmd+'\',this.dataset.v)" data-v="'+esc(d)+'">Выбрать</button>')+'</div>').join('');
+  $('speeds').innerHTML=[0.75,1,1.25,1.5,2].map(x=>'<button class="'+((S.speed||1)===x?'on':'')+'" style="font-size:15px" onclick="c(\'speed\','+x+')">'+x+'×</button>').join('');
   $('dubs').innerHTML=lst(h.dubs,h.dub,'dub'); $('players').innerHTML=lst(h.players,h.player,'player');
 }
 async function loadSeasons(){
@@ -259,6 +336,13 @@ async function loadSeasons(){
   const fr=await api('franchise', h.channel);
   $('seasons').innerHTML = Array.isArray(fr)&&fr.length ? fr.map(o=>'<div class="item"><div class="tt '+(o.current?'cur':'')+'">'+esc(o.title)+(o.year?' ('+o.year+')':'')+'<br><small>'+esc(o.type)+' · '+esc(o.text)+'</small></div>'
      +(o.current?'':'<button onclick="c(\'season\','+o.anime_id+')">▶</button>')+'</div>').join('') : '<small>Других частей нет</small>';
+}
+let CI=[];
+async function loadCont(){
+  $('cont').innerHTML='<small>Загружаю…</small>';
+  const r=await api('continue_list'); if(!Array.isArray(r)){ $('cont').textContent=r.error||'Ошибка'; return; } CI=r;
+  $('cont').innerHTML = r.slice(0,10).map((p,i)=>'<div class="item" onclick="c(\'resume\',CI['+i+'])">'+(p.poster?'<img src="'+esc(p.poster)+'" loading="lazy">':'<img>')
+    +'<div class="tt">'+esc(p.title)+'<br><small>серия '+esc(p.episode)+' · '+fmt(p.pos)+(p.dur?' / '+fmt(p.dur):'')+' · '+esc(p.dub)+'</small></div><button>▶</button></div>').join('') || '<small>Пока пусто</small>';
 }
 async function loadGuide(){
   $('guide').innerHTML='<small>Загружаю…</small>';
@@ -302,6 +386,6 @@ function renderList(){
     || '<small>Пусто. Загрузить свой профиль: на экране меню → «Мои списки».</small>';
 }
 setInterval(render, 2000);
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden && link && up) link.send('c',{type:'hello'}); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && link && up){ lastHello=0; hello(); } });
 connect();
 </script></body></html>
