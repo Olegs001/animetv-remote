@@ -1,1 +1,11 @@
-{"apk": "3.10", "url": "https://olegs001.github.io/animetv-remote/AnimeTV.apk", "pc": "3.5.3", "pc_url": "https://olegs001.github.io/animetv-remote/AnimeTV_pc.zip", "pc_sha256": "d9c52c57b6a943372196489c9dd603a667fb3bfc0c0c791dd6051dd645a5c748", "pc_notes": "Кнопка «Тут реклама»: блокирует рекламу сразу и у всех друзей; авто-блокировка рекламы Kodik", "apk_sha256": "27d2afa44e92d006ab02fedd95acc352c951f7ec7f60c09334364d7e4365d80d", "apk_notes": "Кнопка «Тут реклама»: блокирует рекламу сразу и у всех друзей; авто-блокировка рекламы Kodik"}
+{
+ "apk": "3.12",
+ "url": "https://olegs001.github.io/animetv-remote/AnimeTV.apk",
+ "pc": "3.6.1",
+ "pc_url": "https://olegs001.github.io/animetv-remote/versions/AnimeTV_pc-3.6.1.zip",
+ "pc_sha256": "5e37b84639bbbdff28776cb37f9c3e5b7d9d07a1bb3ddec6d405eaac352638c9",
+ "pc_notes": "Каналы без «застрявших» плееров (Zedfilm), автозапуск и автозакрытие ошибок чужих плееров + всё из 3.6.0",
+ "apk_sha256": "f2a76f9287f4290702fefd8a3169fb9d213f6e4ac76df491c461bcaf92792e4c",
+ "apk_notes": "Каналы без «застрявших» плееров (Zedfilm), автозапуск и автозакрытие ошибок чужих плееров + всё из 3.6.0",
+ "apk_url": "https://olegs001.github.io/animetv-remote/versions/AnimeTV-3.12.apk"
+}
